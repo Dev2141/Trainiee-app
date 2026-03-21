@@ -1,6 +1,6 @@
-# Trainiee App
+# Trainee App
 
-Trainiee App is a React + Vite frontend with Capacitor Android support.
+Trainee App is a React + Vite frontend with Capacitor Android support.
 
 ## Tech Stack
 
@@ -17,7 +17,7 @@ Trainiee App is a React + Vite frontend with Capacitor Android support.
 ## Project Structure
 
 ```text
-Trainiee-app/
+Trainee-app/
 ├── src/
 │   ├── main.jsx                 # React entry point
 │   ├── App.jsx                  # Top-level app + tab navigation state
