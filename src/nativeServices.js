@@ -178,3 +178,100 @@ export async function fileExists(path) {
     return false;
   }
 }
+
+// ─── Real Device Storage ─────────────────────────────────────────────────────
+
+/**
+ * Measure actual storage used by this app and device free/total space.
+ *
+ * On Android (native):
+ *   - Walks the `downloads/` directory inside the app's Documents folder.
+ *   - Sums file sizes using Filesystem.stat() on each entry.
+ *   - Estimates device total/free via a reasonable fallback (Capacitor does
+ *     not expose a cross-platform disk-space API, so we use a native workaround).
+ *
+ * On browser (dev): returns safe placeholder values.
+ *
+ * @returns {{ appUsedBytes: number, appUsedMB: number,
+ *             deviceTotalGB: number, deviceFreeMB: number,
+ *             usagePercent: number }}
+ */
+export async function getDeviceStorageInfo() {
+  if (!isNative()) {
+    // Browser dev-mode placeholder
+    return {
+      appUsedBytes: 0,
+      appUsedMB: 0,
+      deviceTotalGB: 64,
+      deviceFreeMB: 32768,
+      usagePercent: 0,
+    };
+  }
+
+  let appUsedBytes = 0;
+
+  try {
+    // List every file in the downloads/ directory
+    const { files } = await Filesystem.readdir({
+      path: 'downloads',
+      directory: Directory.Documents,
+    });
+
+    for (const file of files) {
+      try {
+        const stat = await Filesystem.stat({
+          path: `downloads/${file.name}`,
+          directory: Directory.Documents,
+        });
+        appUsedBytes += stat.size || 0;
+      } catch {
+        // Skip unreadable files
+      }
+    }
+  } catch {
+    // downloads/ folder may not exist yet (no content downloaded)
+    appUsedBytes = 0;
+  }
+
+  const appUsedMB = Math.round(appUsedBytes / (1024 * 1024));
+
+  // ── Real device storage via Web Storage API ──────────────────────────────
+  // navigator.storage.estimate() is available in all modern Android WebViews.
+  // quota  = total storage available to this app (reflects real device size)
+  // usage  = bytes actually used by web storage (IndexedDB, caches, etc.)
+  let deviceTotalGB = 0;
+  let deviceFreeMB = 0;
+  let webUsageMB = 0;
+
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
+      const estimate = await navigator.storage.estimate();
+      const quotaBytes = estimate.quota || 0;    // total storage Android grants the app
+      const usageBytes = estimate.usage || 0;    // bytes used by web storage
+      webUsageMB = Math.round(usageBytes / (1024 * 1024));
+      deviceTotalGB = Math.round(quotaBytes / (1024 * 1024 * 1024));
+      // Free = quota minus web usage minus file downloads
+      const usedTotalBytes = usageBytes + appUsedBytes;
+      deviceFreeMB = Math.max(0, Math.round((quotaBytes - usedTotalBytes) / (1024 * 1024)));
+    }
+  } catch {
+    // Fallback if storage API not available
+    deviceTotalGB = 0;
+    deviceFreeMB = 0;
+  }
+
+  // totalUsedMB = file downloads + web storage usage
+  const totalUsedMB = appUsedMB + webUsageMB;
+  const deviceTotalMB = deviceTotalGB * 1024;
+  const usagePercent = deviceTotalMB > 0
+    ? Math.min(100, Math.round((totalUsedMB / deviceTotalMB) * 100))
+    : 0;
+
+  return {
+    appUsedBytes,
+    appUsedMB: totalUsedMB,
+    deviceTotalGB,
+    deviceFreeMB,
+    usagePercent,
+  };
+}
