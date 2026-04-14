@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.eagle.lms;
 
 import static org.junit.Assert.*;
 
